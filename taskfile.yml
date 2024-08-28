@@ -1,0 +1,32 @@
+version: '3'
+
+tasks:
+  run:
+    cmds:
+      - task build_hot_reload
+      - task start_hot_reload
+        
+  start_hot_reload:
+    interal: true
+    cmds:
+    - tmux split-pane ./build/dev/game.exe
+    preconditions: 
+      - sh: "pgrep -f game &< /dev/null"
+  build_hot_reload:
+    deps: [build_game]
+    cmds:
+      - powershell.exe /c odin build src/main-hot-reload -out:./build/dev/game.exe -strict-style -vet-using-stmt -vet-using-param -vet-style -vet-semicolon -debug
+    sources:
+      - ./src/main-hot-reload/**/*.odin
+      - ./build/dev/game.dll
+    generates:
+      - ./build/dev/game.exe
+  build_game:
+    cmds: 
+      - powershell.exe /c odin build src/game -show-timings -define:RAYLIB_SHARED=true -build-mode:dll -out:./build/dev/game.dll -strict-style -vet-using-stmt -vet-using-param -vet-style -vet-semicolon -debug
+    sources:
+      - ./src/game/**/*.odin
+    generates:
+      - ./build/dev/game.dll
+
+
