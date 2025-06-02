@@ -25,7 +25,6 @@ ROTATE_SPEED :: 5
 MOVE_SPEED :: 3
 MAX_VELOCITY :: 1.5
 SCALE :: 20
-
 ASTEROID_POINTS :: 10
 
 Vec2 :: rl.Vector2
@@ -42,45 +41,49 @@ get_asteroid_scale :: proc(size: AsteroidSize) -> f32 {
     case .LARGE:
         scale = SCALE * 7.0
     case .MEDIUM:
-        scale = SCALE * 1.4
+        scale = SCALE * 3.5
     case .SMALL:
         scale = SCALE * 0.8
     }
     return scale
+
 }
 
 Asteroid :: struct {
     pos, vel: Vec2,
     size:     AsteroidSize,
+    radius:   f32,
     points:   [ASTEROID_POINTS]Vec2,
+    remove:   bool,
 }
-
 
 asteroid_create :: proc(pos, vel: Vec2, size: AsteroidSize) -> Asteroid {
 
     points: [ASTEROID_POINTS]Vec2
+    col_radius: f32
 
-    switch size {
-    case .SMALL:
-    case .MEDIUM:
-    case .LARGE:
-        for i in 0 ..< ASTEROID_POINTS {
+    for i in 0 ..< ASTEROID_POINTS {
 
-            radius := 0.3 + (0.2 * rand.float32())
+        radius := 0.3 + (0.2 * rand.float32())
 
-            if rand.float32() < 0.2 {
-                radius -= 0.2
-            }
-            phi := math.TAU * f32(i) / ASTEROID_POINTS
-
-            points[i] = {
-                math.cos(f32(phi)) * radius,
-                math.sin(f32(phi)) * radius,
-            }
+        if rand.float32() < 0.2 {
+            radius -= 0.2
         }
+        col_radius += radius
+        phi := math.TAU * f32(i) / ASTEROID_POINTS
+
+        points[i] = {math.cos(f32(phi)) * radius, math.sin(f32(phi)) * radius}
     }
 
-    return {pos, vel, size, points}
+    col_radius /= ASTEROID_POINTS
+    return {pos, vel, size, col_radius, points, false}
+
+}
+
+hit_asteroid :: proc(asteroid: ^Asteroid) {
+    asteroid.remove = true
+    append(&g_mem.asteroids, asteroid_create(asteroid.pos, {0, 0}, .MEDIUM))
+
 }
 
 Projectile :: struct {
@@ -152,6 +155,20 @@ asteroids_update :: proc() {
 projectile_update :: proc() {
     for &projectile in g_mem.projectiles {
         projectile.pos += projectile.vel * rl.GetFrameTime()
+
+        for &asteroid in g_mem.asteroids {
+            if !projectile.remove &&
+               rl.CheckCollisionCircles(
+                   projectile.pos,
+                   1,
+                   asteroid.pos,
+                   asteroid.radius * get_asteroid_scale(asteroid.size),
+               ) {
+
+                hit_asteroid(&asteroid)
+                projectile.remove = true
+            }
+        }
     }
 }
 
@@ -170,10 +187,17 @@ screen_wrap :: proc(pos: ^Vec2) {
     }
 }
 
+remove_entities :: proc() {
+    #reverse for asteroid, idx in g_mem.asteroids {
+        if asteroid.remove == true do unordered_remove(&g_mem.asteroids, idx)
+    }
+}
+
 update :: proc() {
     player_update()
     asteroids_update()
     projectile_update()
+    remove_entities()
 }
 
 
@@ -212,6 +236,11 @@ draw :: proc() {
             get_asteroid_scale(asteroid.size),
             0,
             asteroid.points[:],
+        )
+        rl.DrawCircleLinesV(
+            asteroid.pos,
+            asteroid.radius * get_asteroid_scale(asteroid.size),
+            rl.RED,
         )
     }
     for &projectile in g_mem.projectiles {
